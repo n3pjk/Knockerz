@@ -1,7 +1,7 @@
 /**
  *  Knockerz
  *
- *  Auther: paul.knight@delmarvacomputer.com
+ *  Author: paul.knight@delmarvacomputer.com
  *  Date: 6/17/17
  *
  *  Based on the work of brian@bevey.org in 2013.
