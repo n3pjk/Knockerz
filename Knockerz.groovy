@@ -34,7 +34,7 @@ preferences {
 /**
  * PAGE METHODS
  **/
- 
+
 /**
  * Main page
  * The "Doors" and "Notification Options" configuration pages, along
@@ -119,7 +119,7 @@ def pageDoors() {
   def helpAbout =
     "Select acceleration and contact sensors, then " +
     "set delay after knock to see if door opens."
-    
+
   def inputAccelerationSensors = [
     name:           "accelerationSensors",
     title:          "Listen For Knocks At",
@@ -127,7 +127,7 @@ def pageDoors() {
     multiple:       true,
     required:       true
   ]
-  
+
   def inputContactSensors = [
     name:           "contactSensors",
     title:          "See If These Doors Open",
@@ -142,7 +142,7 @@ def pageDoors() {
     type:           "number",
     required:       false
   ]
-  
+
   def pageProperties = [
     name:           "pageDoors",
     nextPage:       "pageSetup",
@@ -171,7 +171,7 @@ def pageDoors() {
  */
 def pageNotifications() {
   LOG("pageNotifications()")
-  
+
   def helpAbout =
     "How do you want to be notified of a knock at a " +
     "door? Turn on a switch, a chime, or dim a light. " +
@@ -185,7 +185,7 @@ def pageNotifications() {
     multiple:       true,
     required:       false
   ]
-  
+
   def inputDimmerLevel = [
     name:           "dimmerLevel",
     type:           "enum",
@@ -200,9 +200,9 @@ def pageNotifications() {
     type:           "text",
     title:          "Message Phrase",
     defaultValue:   "%door detected a knock.",
-    required:       false
+    required:       fale
   ]
-  
+
   def inputSendPush = [
     name:           "sendPush",
     type:           "bool",
@@ -217,7 +217,7 @@ def pageNotifications() {
     multiple:       true,
     required:       false
   ]
-  
+
   def inputPhone1 = [
     name:           "phone1",
     type:           "phone",
@@ -270,6 +270,14 @@ def pageNotifications() {
     required:       false
   ]
 
+  def inputEchoDevice = [
+    name:           "echoSpeaks",
+    type:           "Echo Speaks Device",
+    title:          "Select an Amazon Echo Device",
+    multiple:       false,
+    required:       false
+  ]
+
   def pageProperties = [
     name:           "pageNotifications",
     nextPage:       "pageSetup",
@@ -298,6 +306,7 @@ def pageNotifications() {
       input inputPushbulletDevice
     }
     section("Audio Notifications") {
+      input inputEchoDevice
       input inputAudioPlayers
       input inputSpeechText
     }
@@ -313,7 +322,7 @@ def pageNotifications() {
  */
 def pageRestrictions() {
   LOG("pageRestrictions()")
-  
+
   def helpAbout =
     "Restrict when you will receive door knock notifications " +
     "by time of day, day of week, house mode, or when one or " +
@@ -325,14 +334,14 @@ def pageRestrictions() {
     title:          "Starting time",
     required:       false
   ]
-  
+
   def inputStopTime = [
     name:           "stopTime",
     type:           "time",
     title:          "Ending time",
     required:       false
   ]
-  
+
   def inputWeekDays = [
     name:           "weekDays",
     type:           "enum",
@@ -341,7 +350,7 @@ def pageRestrictions() {
     multiple:       true,
     required:       false
   ]
-  
+
   def inputModes = [
     name:           "modes",
     type:           "mode",
@@ -357,7 +366,7 @@ def pageRestrictions() {
     multiple:       true,
     required:       false
   ]
-  
+
   def inputSwitchState = [
     name:           "notifySwitchState",
     type:           "enum",
@@ -423,7 +432,7 @@ def initialize() {
 /**
  * EVENT HANDLERS
  **/
- 
+
 /**
  * Check the specific contact sensor to see if the door is open or
  * was openned in the last 60 seconds.
@@ -432,7 +441,7 @@ def initialize() {
  */
 def checkMultiSensor(data) {
   LOG("checkMultiSensor(${data.name})")
-  
+
   def contactSensor = settings.contactSensors.find{ it.label == "${data.name}" || it.name == "${data.name}" }
   LOG("Using ${contactSensor?.label ?: contactSensor?.name} contact sensor")
   if ((contactSensor?.latestValue("contact") == "closed") && (now() - (60 * 1000) > state.lastClosed)) {
@@ -450,7 +459,7 @@ def checkMultiSensor(data) {
  */
 def checkAnySensor(data) {
   LOG("checkAnySensor(${data.name})")
-  
+
   if (settings.contactSensors.any { it.latestValue("contact") == "open" }) {
     LOG("${data.name} knocked, but a door is open.")
   } else {
@@ -472,7 +481,7 @@ def checkAnySensor(data) {
  */
 def onMovement(evt) {
   LOG("onMovement(${evt.displayName})")
-  
+
   def delay = (settings.knockDelay == null) ? 5 : settings.knockDelay
   def contactSensor = settings.contactSensors.find{ it.label == "${evt.displayName}" || it.name == "${evt.displayName}" }
   if (contactSensor) {
@@ -497,7 +506,7 @@ def onContact(evt) {
 /**
  * NOTIFICATION HANDLERS
  **/
- 
+
 /**
  * Main notification processor
  * Turns on and dims switches, calls additional notification methods.
@@ -506,11 +515,11 @@ def onContact(evt) {
  */
 private notify(name) {
   LOG("notify(${name})")
-  
+
   // Determine if conditions permit notification
   def restricted = notifyRestrictions()
   if (!restricted) {
-    def msg = textMessage(name)  
+    def msg = textMessage(name)
 
     // Only turn on those switches that are currently off
     def switchesOn = settings.switches?.findAll { it?.currentSwitch == "off" }
@@ -529,6 +538,7 @@ private notify(name) {
       notifyText(msg)
     }
     notifyPushBullet(msg)
+    notifyEcho(name)
     notifyVoice(name)
   } else {
     LOG("notification restricted")
@@ -540,7 +550,7 @@ private notify(name) {
  */
 private def notifyRestrictions() {
   LOG("notifyRestrictions()")
-  
+
   // Create and ensure the data object is set to local time zone
   def df = new java.text.SimpleDateFormat("EEEE")
   df.setTimeZone(location.timeZone)
@@ -554,7 +564,7 @@ private def notifyRestrictions() {
       return true
     }
   }
-  
+
   // Is the time within the specified interval?
   if (settings.startTime && settings.stopTime) {
     def timeCheck = timeOfDayIsBetween(settings.startTime, settings.stopTime, new Date(), location.timeZone)
@@ -579,7 +589,7 @@ private def notifyRestrictions() {
     LOG("Switches not ${settings.notifySwitchState}: ${switchCheck}")
     return true
   }
-   
+
   return false
 }
 
@@ -590,7 +600,7 @@ private def notifyRestrictions() {
  */
 private def notifyContacts(msg) {
   LOG("notifyContacts(${msg})")
-  
+
   sendNotificationToContacts(msg, contacts)
 }
 
@@ -647,7 +657,7 @@ private def notifyText(msg) {
 private def notifyPushBullet(msg) {
   if (settings.pushbullet) {
     settings.pushbullet*.push(location.name, msg)
-  }   
+  }
 }
 
 /**
@@ -669,6 +679,21 @@ private def notifyVoice(name) {
 
   if (phrase) {
     settings.audioPlayers*.playText(phrase)
+  }
+}
+
+private def notifyEcho(name) {
+  LOG("notifyEcho(${name})")
+
+  if (!settings.echoSpeaks) {
+    return
+  }
+
+  // Replace %door with name
+  def phrase = textSpeech(name)
+
+  if (phrase) {
+    settings.echoSpeaks*.playAnnouncementAll(phrase,"Knockerz")
   }
 }
 
