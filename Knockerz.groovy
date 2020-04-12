@@ -272,7 +272,7 @@ def pageNotifications() {
 
   def inputEchoDevice = [
     name:           "echoSpeaks",
-    type:           "Echo Speaks Device",
+    type:           "capability.musicPlayer",
     title:          "Select an Amazon Echo Device",
     multiple:       false,
     required:       false
