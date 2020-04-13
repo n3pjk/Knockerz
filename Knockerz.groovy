@@ -11,6 +11,7 @@
  *  turning on a switch and/or dimming the device.
  *
  *  Added notification restrictions 2/12/20
+ *  Added Echo Speaks support 4/13/20
  */
 
 definition(
@@ -145,7 +146,7 @@ def pageDoors() {
 
   def pageProperties = [
     name:           "pageDoors",
-    nextPage:       "pageSetup",
+    nextPage:       "pageNotifications",
     uninstall:      false
   ]
 
@@ -176,7 +177,8 @@ def pageNotifications() {
     "How do you want to be notified of a knock at a " +
     "door? Turn on a switch, a chime, or dim a light. " +
     "Send a push or SMS message. Use PushBullet " +
-    "or an audio announcement."
+    "or an audio announcement. Amazon Echo " +
+    "requires Echo Speaks."
 
   def inputSwitches = [
     name:           "switches",
@@ -277,10 +279,18 @@ def pageNotifications() {
     multiple:       false,
     required:       false
   ]
+  
+  def inputEchoAll = [
+    name:           "echoAll",
+    type:           "bool",
+    title:          "Announce on all Echo devices?",
+    defaultValue:   true,
+    required:       false
+  ]
 
   def pageProperties = [
     name:           "pageNotifications",
-    nextPage:       "pageSetup",
+    nextPage:       "pageRestrictions",
     uninstall:      false
   ]
 
@@ -306,9 +316,10 @@ def pageNotifications() {
       input inputPushbulletDevice
     }
     section("Audio Notifications") {
-      input inputEchoDevice
-      input inputAudioPlayers
       input inputSpeechText
+      input inputAudioPlayers
+      input inputEchoDevice
+      input inputEchoAll
     }
   }
 }
@@ -370,11 +381,19 @@ def pageRestrictions() {
   def inputSwitchState = [
     name:           "notifySwitchState",
     type:           "enum",
-    metadata:       [values:["On","Off"]],
+    metadata:       [values:["on","off"]],
     title:          "Are",
-    defaultValue:   "On",
+    defaultValue:   "on",
     multiple:       false,
     required:       true
+  ]
+  
+  def inputSetSwitchState = [
+    name:           "setSwitchState",
+    type:           "bool",
+    title:          "Set switches as above afterward?",
+    defaultValue:   false,
+    required:       false
   ]
 
   def pageProperties = [
@@ -400,6 +419,7 @@ def pageRestrictions() {
     section("Notify when") {
       input inputSwitches
       input inputSwitchState
+      input inputSetSwitchState
     }
   }
 }
@@ -587,6 +607,14 @@ private def notifyRestrictions() {
   def switchCheck = settings.notifySwitches?.findAll { it?.currentSwitch != settings.notifySwitchState }
   if (switchCheck) {
     LOG("Switches not ${settings.notifySwitchState}: ${switchCheck}")
+    if (settings.setSwitchState) {
+      LOG("Setting to ${settings.notifySwitchState}: ${switchCheck}")
+      if (settings.notifySwitchState == "on") {
+        switchCheck*.on()
+      } else {
+        switchCheck*.off()
+      }
+    }
     return true
   }
 
@@ -693,7 +721,11 @@ private def notifyEcho(name) {
   def phrase = textSpeech(name)
 
   if (phrase) {
-    settings.echoSpeaks*.playAnnouncementAll(phrase,"Knockerz")
+    if (settings.echoAll) {
+      settings.echoSpeaks*.playAnnouncementAll(phrase,"Knockerz")
+    } else {
+      settings.echoSpeaks*.playAnnouncement(phrase,"Knockerz")
+    }
   }
 }
 
