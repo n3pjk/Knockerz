@@ -10,7 +10,7 @@
  *  Alerts are by push, SMS, PushBullet, audio, and/or by
  *  turning on a switch and/or dimming the device.
  *
- *  v2.0.0 - Major workflow revisions 4/22/20
+ *  v2.0.1 - Major workflow/UI revisions 4/22/20
  *  v1.2.0 - Added Echo Speaks support 4/13/20
  *  v1.1.0 - Added notification restrictions 2/12/20
  *  v1.0.0 - Initial release 6/17/17
@@ -30,6 +30,7 @@ preferences {
   page name:"pageSetup"
   page name:"pageDoors"
   page name:"pageNotifications"
+  page name:"pageVoice"
   page name:"pageRestrictions"
   page name:"pageLicense"
 }
@@ -80,6 +81,12 @@ def pageSetup() {
     description:    "Tap to open"
   ]
 
+  def hrefVoice = [
+    page:           "pageVoice",
+    title:          "Voice Notification Options",
+    description:    "Tap to open"
+  ]
+
   def hrefRestrictions = [
     page:           "pageRestrictions",
     title:          "Notification Restrictions",
@@ -115,6 +122,7 @@ def pageSetup() {
       section("Setup Menu") {
         href hrefDoors
         href hrefNotifications
+        href hrefVoice
         href hrefRestrictions
       }
     }
@@ -255,42 +263,9 @@ def pageNotifications() {
     required:       false
   ]
 
-  def inputAudioPlayers = [
-    name:           "audioPlayers",
-    type:           "capability.musicPlayer",
-    title:          "Which audio players?",
-    multiple:       true,
-    required:       false
-  ]
-
-  def inputSpeechText = [
-    name:           "speechText",
-    type:           "text",
-    title:          "Knock Phrase",
-    defaultValue:   "There is a knock at the %door",
-    required:       false
-  ]
-
-  def inputEchoDevice = [
-    name:           "echoSpeaks",
-    type:           "capability.musicPlayer",
-    title:          "Select an Amazon Echo Device",
-    multiple:       false,
-    required:       false,
-    submitOnChange: true
-  ]
-
-  def inputEchoAll = [
-    name:           "echoAll",
-    type:           "bool",
-    title:          "Announce on all Echo devices?",
-    defaultValue:   true,
-    required:       false
-  ]
-
   def pageProperties = [
     name:           "pageNotifications",
-    nextPage:       "pageRestrictions",
+    nextPage:       "pageVoice",
     title:          "Notification Options",
     uninstall:      state.installed
   ]
@@ -315,9 +290,77 @@ def pageNotifications() {
     section("Pushbullet Notifications") {
       input inputPushbulletDevice
     }
-    section("Audio Notifications") {
+  }
+}
+
+/**
+ * "Voice Notification Options" page
+ * Define speech, TTS, audio, and Alexa device options.
+ *
+ * @return a dynamically created "Voice Notification Options" page
+ */
+def pageVoice() {
+
+  def inputSpeechText = [
+    name:           "speechText",
+    type:           "text",
+    title:          "Knock Phrase",
+    defaultValue:   "There is a knock at the %door",
+    required:       false
+  ]
+
+  def inputAudioPlayers = [
+    name:           "audioPlayers",
+    type:           "capability.musicPlayer",
+    title:          "Which audio players?",
+    multiple:       true,
+    required:       false
+  ]
+
+  def inputSpeechDevices = [
+    name:           "speechDevices",
+    type:           "capability.speechSynthesis",
+    title:          "Which speech devices?",
+    multiple:       true,
+    required:       false
+  ]
+
+  def inputEchoDevice = [
+    name:           "echoSpeaks",
+    type:           "capability.musicPlayer",
+    title:          "Select an Amazon Echo Device",
+    multiple:       false,
+    required:       false,
+    submitOnChange: true
+  ]
+
+  def inputEchoAll = [
+    name:           "echoAll",
+    type:           "bool",
+    title:          "Announce on all Echo devices?",
+    defaultValue:   true,
+    required:       false
+  ]
+
+  def pageProperties = [
+    name:           "pageVoice",
+    nextPage:       "pageRestrictions",
+    title:          "Voice Notification Options",
+    uninstall:      state.installed,
+    hideWhenEmpty:  true
+  ]
+
+  return dynamicPage(pageProperties) {
+    section("Content") {
       input inputSpeechText
+    }
+    section("Speech") {
+      input inputSpeechDevices
+    }
+    section("Audio") {
       input inputAudioPlayers
+    }
+    section("Echo Speaks") {
       input inputEchoDevice
       if (settings.echoSpeaks) {
         input inputEchoAll
@@ -597,7 +640,8 @@ private notify(name) {
     }
     notifyPushBullet(msg)
     notifyEcho(name)
-    notifyVoice(name)
+    notifyAudio(name)
+    notifySpeech(name)
   } else {
     LOG("notification restricted")
   }
@@ -715,14 +759,14 @@ private def notifyPushBullet(msg) {
 }
 
 /**
- * Process a text-to-speech message. Note that the string
- * '%door' in the message text will be replaced with the
+ * Process a text-to-speech message using audio. Note that the
+ * string '%door' in the message text will be replaced with the
  * name of the acceleration sensor that detected the knock.
  *
  * @param the name of the acceleration sensor that detected the knock.
  */
-private def notifyVoice(name) {
-  LOG("notifyVoice(${name})")
+private def notifyAudio(name) {
+  LOG("notifyAudio(${name})")
 
   if (!settings.audioPlayers) {
     return
@@ -733,6 +777,29 @@ private def notifyVoice(name) {
 
   if (phrase) {
     settings.audioPlayers*.playText(phrase)
+  }
+}
+
+/**
+ * Process a text-to-speech message using speech synthesis. Note
+ * that the string '%door' in the message text will be replaced
+ * with the name of the acceleration sensor that detected the
+ * knock.
+ *
+ * @param the name of the acceleration sensor that detected the knock.
+ */
+private def notifySpeech(name) {
+  LOG("notifySpeech(${name})")
+
+  if (!settings.speechDevices) {
+    return
+  }
+
+  // Replace %door with name
+  def phrase = textSpeech(name)
+
+  if (phrase) {
+    settings.speechDevices*.speak(phrase)
   }
 }
 
@@ -764,7 +831,7 @@ private def textSpeech(name) {
 }
 
 private def getVersion() {
-  return "2.0.0"
+  return "2.0.1"
 }
 
 private def textCopyright() {
