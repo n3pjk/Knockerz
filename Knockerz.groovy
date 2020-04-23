@@ -193,7 +193,7 @@ def pageDoors() {
  * "Notification Options" page
  * Define what happens if someone is actually knocking on a door.
  * Switches can be turned on, and, optionally dimmed. A message
- * can be sent via push, text, PushBullet, or read aloud.
+ * can be sent via push, text, or PushBullet.
  *
  * @return a dynamically created "Notifications Options" page
  */
@@ -203,9 +203,8 @@ def pageNotifications() {
   def helpAbout =
     "How do you want to be notified of a knock at a " +
     "door? Turn on a switch, a chime, or dim a light. " +
-    "Send a push or SMS message. Use PushBullet " +
-    "or an audio announcement. Amazon Echo " +
-    "requires Echo Speaks."
+    "Send an SMS text message, push or PushBullet " +
+    "announcement."
 
   def inputNotifySwitches = [
     name:           "notifySwitches",
@@ -301,6 +300,11 @@ def pageNotifications() {
  */
 def pageVoice() {
 
+  def helpAbout =
+    "Do you prefer an audio or voice announcement? Enter the phrase you want " +
+    "spoken, '%door' will be replaced by the name of the sensor. Amazon Echo " +
+    "requires Echo Speaks. Non-TTS audio devices are not yet supported."
+
   def inputSpeechText = [
     name:           "speechText",
     type:           "text",
@@ -315,6 +319,14 @@ def pageVoice() {
     title:          "Which audio players?",
     multiple:       true,
     required:       false
+  ]
+
+  def inputUseTTS = [
+    name:           "useTTS",
+    type:           "bool",
+    title:          "Supports TTS?",
+    defaultValue:   true,
+    required:       true
   ]
 
   def inputSpeechDevices = [
@@ -351,6 +363,9 @@ def pageVoice() {
   ]
 
   return dynamicPage(pageProperties) {
+    section("Instructions") {
+      paragraph helpAbout
+    }
     section("Content") {
       input inputSpeechText
     }
@@ -359,6 +374,7 @@ def pageVoice() {
     }
     section("Audio") {
       input inputAudioPlayers
+      input inputUseTTS
     }
     section("Echo Speaks") {
       input inputEchoDevice
@@ -632,6 +648,7 @@ private notify(name) {
     // TODO: Add camera support?
     //settings.cameras*.take()
 
+    // Standard SMS, push and PushBullet
     if (contacts) {
       notifyContacts(msg)
     } else {
@@ -639,6 +656,8 @@ private notify(name) {
       notifyText(msg)
     }
     notifyPushBullet(msg)
+
+    // Voice notification options
     notifyEcho(name)
     notifyAudio(name)
     notifySpeech(name)
@@ -772,11 +791,13 @@ private def notifyAudio(name) {
     return
   }
 
-  // Replace %door with name
-  def phrase = textSpeech(name)
+  if (settings.useTTS) {
+    // Replace %door with name
+    def phrase = textSpeech(name)
 
-  if (phrase) {
-    settings.audioPlayers*.playText(phrase)
+    if (phrase) {
+      settings.audioPlayers*.playText(phrase)
+    }
   }
 }
 
