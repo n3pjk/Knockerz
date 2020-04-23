@@ -10,8 +10,10 @@
  *  Alerts are by push, SMS, PushBullet, audio, and/or by
  *  turning on a switch and/or dimming the device.
  *
- *  Added notification restrictions 2/12/20
- *  Added Echo Speaks support 4/13/20
+ *  v2.0.0 - Major workflow revisions 4/22/20
+ *  v1.2.0 - Added Echo Speaks support 4/13/20
+ *  v1.1.0 - Added notification restrictions 2/12/20
+ *  v1.0.0 - Initial release 6/17/17
  */
 
 definition(
@@ -29,7 +31,7 @@ preferences {
   page name:"pageDoors"
   page name:"pageNotifications"
   page name:"pageRestrictions"
-  page name:"pageAbout"
+  page name:"pageLicense"
 }
 
 /**
@@ -47,62 +49,77 @@ preferences {
 def pageSetup() {
   LOG("pageSetup()")
 
-  def pageProperties = [
-    name:       "pageSetup",
-    nextPage:   null,
-    install:    true,
-    uninstall:  state.installed
+  def hrefGithub = [
+    url:            "https://github.com/n3pjk/Knockerz/",
+    style:          "embedded",
+    title:          "More information...",
+    description:    "https://github.com/n3pjk/Knockerz/blob/master/README.md",
+    required:       false
   ]
 
-  return dynamicPage(pageProperties) {
-    section("Setup Menu") {
-      href "pageDoors", title:"Add/Remove Doors", description:"Tap to open"
-      href "pageNotifications", title:"Notification Options", description:"Tap to open"
-      href "pageRestrictions", title:"Notification Restrictions", description:"Tap to open"
-      href "pageAbout", title:"About Knockerz", description:"Tap to open"
-    }
-    section([title:"Options", mobileOnly:true]) {
-      label title:"Assign a name", required:false
-    }
-  }
-}
+  def hrefPaypal = [
+    url:            "https://www.paypal.me/n3pjk",
+    title:          "If you like this smartapp, please support the developer via PayPal using the link below"
+  ]
 
-/**
- * "About" page
- * Identifies the auther and license.
- *
- * @return a dynamically created "About" page
- */
-def pageAbout() {
-  LOG("pageAbout()")
+  def hrefDoors = [
+    page:           "pageDoors",
+    title:          "Doors",
+    description:    "Tap to open"
+  ]
 
-  def textAbout =
-    "Version ${getVersion()}\n${textCopyright()}\n\n" +
-    "You can contribute to the development of this app by making a " +
-    "donation to paul.knight@delmarvacomputer.com via PayPal."
+  def hrefLicense = [
+    page:           "pageLicense",
+    title:          "License",
+    description:    "Tap to view license"
+  ]
 
-  // This URL has not been created yet
-  def hrefInfo = [
-    url:        "http://delmarvacomputer.github.io/knockerz/",
-    style:      "embedded",
-    title:      "Tap here for more information...",
-    description:"http://delmarvacomputer.github.io/knockerz/",
-    required:   false
+  def hrefNotifications = [
+    page:           "pageNotifications",
+    title:          "Notification Options",
+    description:    "Tap to open"
+  ]
+
+  def hrefRestrictions = [
+    page:           "pageRestrictions",
+    title:          "Notification Restrictions",
+    description:    "Tap to open"
+  ]
+
+  def inputLabel = [
+    title:          "Assign a name",
+    required:       false
   ]
 
   def pageProperties = [
-    name:       "pageAbout",
-    nextPage:   "pageSetup",
-    uninstall:  false
+    name:           "pageSetup",
+    nextPage:       "pageDoors",
+    install:        false,
+    uninstall:      state.installed
   ]
 
   return dynamicPage(pageProperties) {
     section("About") {
-      paragraph textAbout
-      //href hrefInfo
+      paragraph "${app.getName()}, the SmartApp that notifies when someone " +
+        "knocks on a door, but does not open it. Alerts are by push, SMS, " +
+        "PushBullet, audio, Alexa, setting a switch or dimming a light."
+      paragraph "Version ${getVersion()}"
+      paragraph "${textCopyright()}"
+      href hrefLicense
+      href hrefGithub
     }
-    section("License") {
-      paragraph textLicense()
+    section("Paypal Donation") {
+      href hrefPaypal
+    }
+    if (state.installed) {
+      section("Setup Menu") {
+        href hrefDoors
+        href hrefNotifications
+        href hrefRestrictions
+      }
+    }
+    section([mobileOnly:true],"Rename SmartApp") {
+      label  inputLabel
     }
   }
 }
@@ -139,19 +156,21 @@ def pageDoors() {
 
   def inputKnockDelay = [
     name:           "knockDelay",
-    title:          "Knock Delay (default 5s)",
+    title:          "Knock Delay in seconds",
     type:           "number",
-    required:       false
+    defaultValue:   3,
+    required:       true
   ]
 
   def pageProperties = [
     name:           "pageDoors",
     nextPage:       "pageNotifications",
-    uninstall:      false
+    title:          "Doors",
+    uninstall:      state.installed
   ]
 
   return dynamicPage(pageProperties) {
-    section("Add/Remove Doors") {
+    section("Instructions") {
       paragraph helpAbout
     }
     section("Select Doors") {
@@ -180,16 +199,17 @@ def pageNotifications() {
     "or an audio announcement. Amazon Echo " +
     "requires Echo Speaks."
 
-  def inputSwitches = [
-    name:           "switches",
+  def inputNotifySwitches = [
+    name:           "notifySwitches",
     type:           "capability.switch",
     title:          "Set these switches",
     multiple:       true,
-    required:       false
+    required:       false,
+    submitOnChange: true
   ]
 
-  def inputDimmerLevel = [
-    name:           "dimmerLevel",
+  def inputNotifyDimmerLevel = [
+    name:           "notifyDimmerLevel",
     type:           "enum",
     metadata:       [values:["10%","20%","30%","40%","50%","60%","70%","80%","90%","100%"]],
     title:          "Dimmer Level",
@@ -202,7 +222,7 @@ def pageNotifications() {
     type:           "text",
     title:          "Message Phrase",
     defaultValue:   "%door detected a knock.",
-    required:       fale
+    required:       false
   ]
 
   def inputSendPush = [
@@ -220,29 +240,8 @@ def pageNotifications() {
     required:       false
   ]
 
-  def inputPhone1 = [
-    name:           "phone1",
-    type:           "phone",
-    title:          "Send to this number",
-    required:       false
-  ]
-
-  def inputPhone2 = [
-    name:           "phone2",
-    type:           "phone",
-    title:          "Send to this number",
-    required:       false
-  ]
-
-  def inputPhone3 = [
-    name:           "phone3",
-    type:           "phone",
-    title:          "Send to this number",
-    required:       false
-  ]
-
-  def inputPhone4 = [
-    name:           "phone4",
+  def inputPhone = [
+    name:           "phone",
     type:           "phone",
     title:          "Send to this number",
     required:       false
@@ -277,9 +276,10 @@ def pageNotifications() {
     type:           "capability.musicPlayer",
     title:          "Select an Amazon Echo Device",
     multiple:       false,
-    required:       false
+    required:       false,
+    submitOnChange: true
   ]
-  
+
   def inputEchoAll = [
     name:           "echoAll",
     type:           "bool",
@@ -291,25 +291,25 @@ def pageNotifications() {
   def pageProperties = [
     name:           "pageNotifications",
     nextPage:       "pageRestrictions",
-    uninstall:      false
+    title:          "Notification Options",
+    uninstall:      state.installed
   ]
 
   return dynamicPage(pageProperties) {
-    section("Notification Options") {
+    section("Instructions") {
       paragraph helpAbout
     }
     section("Turn On Switches") {
-      input inputSwitches
-      input inputDimmerLevel
+      input inputNotifySwitches
+      if (settings.notifySwitches) {
+        input inputNotifyDimmerLevel
+      }
     }
     section("Push & SMS Notifications") {
       input inputMessageText
       input("contacts", "contact", title: "Send notification to") {
         input inputSendPush
-        input inputPhone1
-        input inputPhone2
-        input inputPhone3
-        input inputPhone4
+        input inputPhone
       }
     }
     section("Pushbullet Notifications") {
@@ -319,7 +319,9 @@ def pageNotifications() {
       input inputSpeechText
       input inputAudioPlayers
       input inputEchoDevice
-      input inputEchoAll
+      if (settings.echoSpeaks) {
+        input inputEchoAll
+      }
     }
   }
 }
@@ -350,7 +352,8 @@ def pageRestrictions() {
     name:           "stopTime",
     type:           "time",
     title:          "Ending time",
-    required:       false
+    required:       false,
+    submitOnChange: true
   ]
 
   def inputWeekDays = [
@@ -362,36 +365,38 @@ def pageRestrictions() {
     required:       false
   ]
 
-  def inputModes = [
-    name:           "modes",
+  def inputNotifyModes = [
+    name:           "notifyModes",
     type:           "mode",
     title:          "These modes",
     multiple:       true,
     required:       false
   ]
 
-  def inputSwitches = [
-    name:           "notifySwitches",
+  def inputControlSwitches = [
+    name:           "controlSwitches",
     type:           "capability.switch",
     title:          "These switches",
     multiple:       true,
-    required:       false
+    required:       false,
+    submitOnChange: true
   ]
 
-  def inputSwitchState = [
-    name:           "notifySwitchState",
+  def inputControlSwitchState = [
+    name:           "controlSwitchState",
     type:           "enum",
     metadata:       [values:["on","off"]],
     title:          "Are",
     defaultValue:   "on",
     multiple:       false,
-    required:       true
+    required:       true,
+    submitOnChange: true
   ]
-  
+
   def inputSetSwitchState = [
     name:           "setSwitchState",
     type:           "bool",
-    title:          "Set switches as above afterward?",
+    title:          "Turn switches ${settings.notifySwitchState} afterward?",
     defaultValue:   false,
     required:       false
   ]
@@ -399,30 +404,64 @@ def pageRestrictions() {
   def pageProperties = [
     name:           "pageRestrictions",
     nextPage:       "pageSetup",
-    uninstall:      false
+    title:          "Notification Restrictions",
+    install:        true,
+    uninstall:      state.installed
   ]
 
   return dynamicPage(pageProperties) {
-    section("Notification Restrictions") {
+    section("Instructions") {
       paragraph helpAbout
     }
     section("Notify between") {
       input inputStartTime
-      input inputStopTime
+      if (settings.startTime) {
+        input inputStopTime
+      }
     }
     section("Notify on") {
       input inputWeekDays
     }
     section("Notify when the house is in") {
-      input inputModes
+      input inputNotifyModes
     }
     section("Notify when") {
-      input inputSwitches
-      input inputSwitchState
-      input inputSetSwitchState
+      input inputControlSwitches
+      if (settings.controlSwitches) {
+        input inputControlSwitchState
+        input inputSetSwitchState
+      }
     }
   }
 }
+
+/**
+ * "License" page
+ * Display the license for this SmartApp.
+ *
+ * @return a dynamically created "License" page
+ */
+def pageLicense() {
+  LOG("pageLicense()")
+
+  def pageProperties = [
+    name:           "pageLicense",
+    nextPage:       null,
+    title:          "License",
+    install:        false,
+    uninstall:      false
+  ]
+
+  dynamicPage(pageProperties) {
+    section("GNU General Public License v3") {
+      paragraph textLicense()
+    }
+  }
+}
+
+/**
+ * APP INIT
+ **/
 
 def installed() {
     LOG("installed()")
@@ -502,13 +541,12 @@ def checkAnySensor(data) {
 def onMovement(evt) {
   LOG("onMovement(${evt.displayName})")
 
-  def delay = (settings.knockDelay == null) ? 5 : settings.knockDelay
   def contactSensor = settings.contactSensors.find{ it.label == "${evt.displayName}" || it.name == "${evt.displayName}" }
   if (contactSensor) {
-    runIn(delay, "checkMultiSensor", [data: [name: "${evt.displayName}"]])
+    runIn(settings.knockDelay, "checkMultiSensor", [data: [name: "${evt.displayName}"]])
   } else {
     LOG("${evt.displayName} is a ${accelerationSensor.name}")
-    runIn(delay, "checkAnySensor", [data: [name: "${evt.displayName}"]])
+    runIn(settings.knockDelay, "checkAnySensor", [data: [name: "${evt.displayName}"]])
   }
 }
 
@@ -542,7 +580,7 @@ private notify(name) {
     def msg = textMessage(name)
 
     // Only turn on those switches that are currently off
-    def switchesOn = settings.switches?.findAll { it?.currentSwitch == "off" }
+    def switchesOn = settings.notifySwitches?.findAll { it?.currentSwitch == "off" }
     LOG("switchesOn: ${switchesOn}")
     if (switchesOn) {
       switchesOn*.on()
@@ -595,8 +633,8 @@ private def notifyRestrictions() {
   }
 
   // Is the house in a selected mode?
-  if (settings.modes) {
-    def modeCheck = settings.modes.contains(location.currentMode)
+  if (settings.notifyModes) {
+    def modeCheck = settings.notifyModes.contains(location.currentMode)
     if (!modeCheck) {
       LOG("Not allowed in ${location.currentMode} mode")
       return true
@@ -604,12 +642,12 @@ private def notifyRestrictions() {
   }
 
   // Are any switches set to disable notifications?
-  def switchCheck = settings.notifySwitches?.findAll { it?.currentSwitch != settings.notifySwitchState }
+  def switchCheck = settings.controlSwitches?.findAll { it?.currentSwitch != settings.controlSwitchState }
   if (switchCheck) {
-    LOG("Switches not ${settings.notifySwitchState}: ${switchCheck}")
+    LOG("Switches not ${settings.controlSwitchState}: ${switchCheck}")
     if (settings.setSwitchState) {
-      LOG("Setting to ${settings.notifySwitchState}: ${switchCheck}")
-      if (settings.notifySwitchState == "on") {
+      LOG("Setting to ${settings.controlSwitchState}: ${switchCheck}")
+      if (settings.controlSwitchState == "on") {
         switchCheck*.on()
       } else {
         switchCheck*.off()
@@ -660,20 +698,8 @@ private def notifyPush(msg) {
 private def notifyText(msg) {
   LOG("notifyText(${msg})")
 
-  if (settings.phone1) {
-    sendSms(phone1, msg)
-  }
-
-  if (settings.phone2) {
-    sendSms(phone2, msg)
-  }
-
-  if (settings.phone3) {
-    sendSms(phone3, msg)
-  }
-
-  if (settings.phone4) {
-    sendSms(phone4, msg)
+  if (settings.phone) {
+    sendSms(phone, msg)
   }
 }
 
@@ -722,9 +748,9 @@ private def notifyEcho(name) {
 
   if (phrase) {
     if (settings.echoAll) {
-      settings.echoSpeaks*.playAnnouncementAll(phrase,"Knockerz")
+      settings.echoSpeaks*.playAnnouncementAll(phrase,app.getName())
     } else {
-      settings.echoSpeaks*.playAnnouncement(phrase,"Knockerz")
+      settings.echoSpeaks*.playAnnouncement(phrase,app.getName())
     }
   }
 }
@@ -738,11 +764,11 @@ private def textSpeech(name) {
 }
 
 private def getVersion() {
-  return "1.0.0"
+  return "2.0.0"
 }
 
 private def textCopyright() {
-  def text = "Copyright © 2017 Delmarva Computer Associates LLC"
+  def text = "Copyright © 2017-20 Delmarva Computer Associates LLC"
 }
 
 private def textLicense() {
@@ -760,7 +786,11 @@ private def textLicense() {
 }
 
 private def LOG(message) {
-  log.trace message
+  def appID = app.getLabel()
+  if (appID == null) {
+    appID = app.getName()
+  }
+  log.trace "${appID}> " + message
 }
 
 private def STATE() {
